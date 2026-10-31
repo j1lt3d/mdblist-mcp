@@ -58,28 +58,13 @@ Sign in at [mdblist.com](https://mdblist.com), open
 A free account works. Supporter accounts get higher rate limits and larger
 batch lookups.
 
-### 2. Install the server
+### 2. Add the server to your AI client
 
-You need [Node.js 22 or newer](https://nodejs.org) and
-[Git](https://git-scm.com).
-
-```sh
-git clone https://github.com/j1lt3d/mdblist-mcp.git
-cd mdblist-mcp
-npm ci
-npm run build
-```
-
-This builds the server into `dist/index.js`. In the configs below, replace
-`/absolute/path/to/mdblist-mcp` with the folder you just cloned (run `pwd`
-inside it to see the path).
-
-> **Coming soon:** once `mdblist-mcp` is published to npm, you'll be able to
-> skip this step and run it with `npx -y mdblist-mcp` instead.
-
-To update later, run `git pull && npm ci && npm run build` in the same folder.
-
-### 3. Add the server to your AI client
+You need [Docker](https://docs.docker.com/get-docker/). Your client starts the
+published image (`ghcr.io/j1lt3d/mdblist-mcp`, `linux/amd64` and
+`linux/arm64`) when it needs it, so there's nothing else to install. To skip
+Docker and run it with Node.js instead, see
+[Alternative: Node.js](#alternative-nodejs).
 
 #### Claude Desktop
 
@@ -94,8 +79,8 @@ Add this, then restart Claude Desktop:
 {
   "mcpServers": {
     "mdblist": {
-      "command": "node",
-      "args": ["/absolute/path/to/mdblist-mcp/dist/index.js"],
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "MDBLIST_API_KEY", "ghcr.io/j1lt3d/mdblist-mcp"],
       "env": { "MDBLIST_API_KEY": "your-api-key" }
     }
   }
@@ -105,7 +90,7 @@ Add this, then restart Claude Desktop:
 #### Claude Code
 
 ```sh
-claude mcp add mdblist -e MDBLIST_API_KEY=your-api-key -- node /absolute/path/to/mdblist-mcp/dist/index.js
+claude mcp add mdblist -e MDBLIST_API_KEY=your-api-key -- docker run -i --rm -e MDBLIST_API_KEY ghcr.io/j1lt3d/mdblist-mcp
 ```
 
 #### Cursor, Windsurf, Cline and other MCP clients
@@ -122,6 +107,47 @@ Add to `.vscode/mcp.json`:
 {
   "servers": {
     "mdblist": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "MDBLIST_API_KEY", "ghcr.io/j1lt3d/mdblist-mcp"],
+      "env": { "MDBLIST_API_KEY": "your-api-key" }
+    }
+  }
+}
+```
+
+### 3. Ask away
+
+Try _"What's on my MDBList watchlist?"_ to check that it works.
+
+#### Updating and pinning
+
+Tags: `latest`, `X.Y.Z` and `X.Y`. To update, run
+`docker pull ghcr.io/j1lt3d/mdblist-mcp` and restart your client. To pin a
+version, use a tag such as `ghcr.io/j1lt3d/mdblist-mcp:0.2.0` in the config.
+
+The container runs as an unprivileged user, and its application files are
+read-only.
+
+### Alternative: Node.js
+
+To run the server without Docker, you need
+[Node.js 22 or newer](https://nodejs.org) and [Git](https://git-scm.com):
+
+```sh
+git clone https://github.com/j1lt3d/mdblist-mcp.git
+cd mdblist-mcp
+npm ci
+npm run build
+```
+
+This builds the server into `dist/index.js`. In your client config, use `node`
+with the path to that file instead of `docker` (run `pwd` inside the folder to
+see its absolute path):
+
+```json
+{
+  "mcpServers": {
+    "mdblist": {
       "command": "node",
       "args": ["/absolute/path/to/mdblist-mcp/dist/index.js"],
       "env": { "MDBLIST_API_KEY": "your-api-key" }
@@ -130,34 +156,55 @@ Add to `.vscode/mcp.json`:
 }
 ```
 
-### 4. Ask away
-
-Try _"What's on my MDBList watchlist?"_ to check that it works.
-
-### Alternative: Docker
-
-If you'd rather not install Node.js, build the image from the cloned repo:
+For Claude Code:
 
 ```sh
-git clone https://github.com/j1lt3d/mdblist-mcp.git
-cd mdblist-mcp
-docker build -t mdblist-mcp .
+claude mcp add mdblist -e MDBLIST_API_KEY=your-api-key -- node /absolute/path/to/mdblist-mcp/dist/index.js
 ```
 
-```json
-{
-  "mcpServers": {
-    "mdblist": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "MDBLIST_API_KEY", "mdblist-mcp"],
-      "env": { "MDBLIST_API_KEY": "your-api-key" }
-    }
-  }
-}
+To update later, run `git pull && npm ci && npm run build` in the same folder.
+To build the Docker image yourself instead, run `docker build -t mdblist-mcp .`
+there.
+
+> **Coming soon:** once `mdblist-mcp` is published to npm, you'll be able to
+> run it with `npx -y mdblist-mcp` without cloning.
+
+### Alternative: Streamable HTTP
+
+To run the server as a long-lived network service (for example on a home
+server shared by several clients), set `MCP_TRANSPORT=http`:
+
+```sh
+docker run -d --name mdblist-mcp -p 3000:3000 \
+  -e MDBLIST_API_KEY=your-api-key \
+  -e MCP_TRANSPORT=http \
+  -e MCP_AUTH_TOKEN=a-long-random-secret \
+  ghcr.io/j1lt3d/mdblist-mcp
 ```
 
-The container runs as an unprivileged user, and its application files are
-read-only.
+Clients then connect to `http://your-host:3000/mcp` and send the token as a
+bearer token. For example, in Claude Code:
+
+```sh
+claude mcp add --transport http mdblist http://your-host:3000/mcp \
+  --header "Authorization: Bearer a-long-random-secret"
+```
+
+Requests from browsers are only accepted from localhost pages by default. To
+use a browser-based client served from another host, list its hostname in
+`MCP_ALLOWED_ORIGINS` (for example `mdblist.lan`). Other clients don't send an
+`Origin` header and aren't affected.
+
+`GET /healthz` returns `200 ok` without authentication, for container health
+checks. With the [Node.js build](#alternative-nodejs), run
+`MCP_TRANSPORT=http MDBLIST_API_KEY=… node dist/index.js`, which listens on
+`127.0.0.1:3000` by default.
+
+> [!WARNING]
+> Every HTTP client shares your MDBList API key, including tools that change
+> your lists, ratings and watch history. Always set `MCP_AUTH_TOKEN` when the
+> port is reachable by anyone else, and put the server behind HTTPS (a reverse
+> proxy) if it leaves your local network.
 
 ## Available tools
 
@@ -253,12 +300,19 @@ management are left out on purpose.
 
 ## Configuration
 
-| Environment variable | Required | Description                                                                   |
-| -------------------- | -------- | ----------------------------------------------------------------------------- |
-| `MDBLIST_API_KEY`    | Yes      | Your API key from [mdblist.com/preferences](https://mdblist.com/preferences/) |
+| Environment variable  | Required | Description                                                                                                                           |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `MDBLIST_API_KEY`     | Yes      | Your API key from [mdblist.com/preferences](https://mdblist.com/preferences/)                                                         |
+| `MCP_TRANSPORT`       | No       | `stdio` (default) or `http`                                                                                                           |
+| `MCP_HOST`            | No       | HTTP bind address. Defaults to `127.0.0.1` (`0.0.0.0` in the Docker image)                                                            |
+| `PORT`                | No       | HTTP port. Defaults to `3000`                                                                                                         |
+| `MCP_AUTH_TOKEN`      | No       | If set, HTTP clients must send `Authorization: Bearer <token>`                                                                        |
+| `MCP_ALLOWED_ORIGINS` | No       | Comma-separated hostnames (no scheme or port; IPv6 in brackets) that browser-based clients may connect from, in addition to localhost |
 
-The server communicates over stdio and only contacts `api.mdblist.com`. It
-doesn't collect any data or send it anywhere else. API errors, including rate
+The HTTP settings are only read when `MCP_TRANSPORT=http`.
+
+The server communicates over stdio by default, or Streamable HTTP at `/mcp`
+when `MCP_TRANSPORT=http`. It only contacts `api.mdblist.com`, and doesn't collect any data or send it anywhere else. API errors, including rate
 limits (`429` with `Retry-After`), are passed back to the assistant so it can
 explain them or try again.
 
@@ -280,8 +334,8 @@ calls to the MDBList API.
 
 ### Which AI apps does it work with?
 
-Any MCP client that supports local (stdio) servers. That includes Claude
-Desktop, Claude Code, Cursor, Windsurf, Cline, VS Code with GitHub Copilot, and
+Any MCP client that supports local (stdio) or Streamable HTTP servers. That
+includes Claude Desktop, Claude Code, Cursor, Windsurf, Cline, VS Code with GitHub Copilot, and
 others. It supports MCP specification 2026-07-28, and older 2025 clients still
 work.
 
@@ -295,7 +349,10 @@ lists streaming services for everyone.
 ### The server doesn't show up in Claude Desktop
 
 - Restart Claude Desktop completely after you edit the config.
-- Check that `node --version` prints 22 or higher.
+- With Docker: check that Docker is running (`docker info`) and that
+  `docker pull ghcr.io/j1lt3d/mdblist-mcp` works. If the client can't find
+  `docker`, use its full path from `which docker` as the `command`.
+- With Node.js: check that `node --version` prints 22 or higher.
 - Check that the config file is valid JSON and that `MDBLIST_API_KEY` is set.
 - Look at the MCP logs (**Settings → Developer**) for error messages.
 
@@ -330,6 +387,13 @@ and a request test case in `test/tools/<domain>.test.ts`.
 
 CI checks formatting, lint, types, tests with coverage, the build, `npm audit`,
 npm signature verification and the Dockerfile (hadolint).
+
+Releases are automated with
+[semantic-release](https://github.com/semantic-release/semantic-release). PR
+titles must follow [Conventional Commits](https://www.conventionalcommits.org)
+(`feat:`, `fix:`, …), since squash-merged titles decide the next version. Each
+release on `main` updates `CHANGELOG.md`, tags `vX.Y.Z`, creates a GitHub
+release, and pushes the image to `ghcr.io/j1lt3d/mdblist-mcp`.
 
 Contributions are welcome. Please open an issue or pull request.
 
