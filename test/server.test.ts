@@ -169,35 +169,18 @@ describe('MCP server', () => {
       expect(json(result)).toEqual([expect.objectContaining({ external_id: 168348 })]);
     });
 
-    it('get_list by id leaves the MDBList id alone', async () => {
-      const client = await connect(mockFetch(jsonResponse([{ id: 14, name: 'Mine' }])));
-      const result = await client.callTool({ name: 'get_list', arguments: { list: { id: 14 } } });
-      expect(json(result)).toEqual([{ id: 14, name: 'Mine' }]);
-    });
-
-    it('search_lists renames external rows inside {data} and leaves others alone', async () => {
-      const client = await connect(
-        mockFetch(jsonResponse({ data: [externalRow, { id: 14, slug: 'top' }], pagination: {} })),
-      );
-      const result = await client.callTool({ name: 'search_lists', arguments: { query: 'x' } });
-      expect(json(result)).toEqual({
-        data: [
-          { external_id: 168348, name: 'British Crime Shows', source: 'imdb' },
-          { id: 14, slug: 'top' },
-        ],
-        pagination: {},
-      });
-    });
-
     it.each([
       ['get_user_lists', {}],
+      ['search_lists', { query: 'x' }],
       ['get_list_membership', { mediatype: 'show', tmdb: 96677 }],
-    ])('%s renames external rows it returns', async (name, args) => {
-      const client = await connect(mockFetch(jsonResponse({ contains: [externalRow] })));
+      ['browse_lists', { source: 'liked' }],
+      ['get_list', { list: { id: 14 } }],
+    ])('%s keeps MDBList list ids as id, even with an external source', async (name, args) => {
+      // These endpoints return MDBList lists, whose id is what {id} and list_id expect.
+      const body = { data: [{ id: 14, source: 'imdb' }] };
+      const client = await connect(mockFetch(jsonResponse(body)));
       const result = await client.callTool({ name, arguments: args });
-      expect(json(result)).toEqual({
-        contains: [expect.objectContaining({ external_id: 168348 })],
-      });
+      expect(json(result)).toEqual(body);
     });
 
     it('get_list by external_id renames a single-object response', async () => {

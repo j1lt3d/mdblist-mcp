@@ -50,42 +50,35 @@ function listPath(list: ListRef): string {
   return apiPath`/external/lists/${list.external_id}`;
 }
 
-/** `source` values of lists imported from other services; official lists use "official". */
-const EXTERNAL_SOURCES = new Set(['imdb', 'trakt', 'letterboxd']);
-/** Keys under which MDBList wraps list rows (`{data}`, `{lists}`, membership `{contains}`). */
-const ROW_WRAPPERS = ['data', 'lists', 'contains'] as const;
+/** Keys under which MDBList may wrap list rows. */
+const ROW_WRAPPERS = ['data', 'lists'] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-function markRow(row: unknown, external: boolean): unknown {
-  if (!isRecord(row) || !('id' in row)) return row;
-  const { source } = row;
-  const isExternal =
-    external || (typeof source === 'string' && EXTERNAL_SOURCES.has(source.toLowerCase()));
-  if (!isExternal) return row;
+function markRow(row: unknown): unknown {
+  // Never overwrite an external_id the API already sent.
+  if (!isRecord(row) || !('id' in row) || 'external_id' in row) return row;
   const { id, ...rest } = row;
   return { external_id: id, ...rest };
 }
 
 /**
- * External (IMDb, Trakt, Letterboxd) list rows carry a plain `id` that only works as
- * {external_id}: passed as {id} it hits /lists/{id}, which 404s or, worse, returns an
- * unrelated MDBList list with the same number. Renaming the key lets the model copy it
- * into the right field. Rows are recognised by their `source`, or all treated as
- * external when `external` is set (responses from the external-list endpoints).
- * Handles bare arrays, single objects, and rows wrapped in {data}, {lists} or {contains}.
+ * Responses from the external-list endpoints (IMDb, Trakt, Letterboxd imports) carry a
+ * plain `id` that only works as {external_id}: passed as {id} it hits /lists/{id},
+ * which 404s or, worse, returns an unrelated MDBList list with the same number.
+ * Renaming the key lets the model copy it into the right field. Only call this on
+ * responses known to be external; other endpoints' `id`s are real MDBList list IDs.
+ * Handles bare arrays, single objects, and rows wrapped in {data} or {lists}.
  */
-export function markExternalLists(data: unknown, external = false): unknown {
-  if (Array.isArray(data)) return data.map((row: unknown) => markRow(row, external));
+export function markExternalLists(data: unknown): unknown {
+  if (Array.isArray(data)) return data.map(markRow);
   if (!isRecord(data)) return data;
-  for (const key of ROW_WRAPPERS) {
-    const rows = data[key];
-    if (Array.isArray(rows)) {
-      return { ...data, [key]: rows.map((row: unknown) => markRow(row, external)) };
-    }
-  }
-  return markRow(data, external);
+  const wrapped = ROW_WRAPPERS.filter((key) => Array.isArray(data[key]));
+  if (wrapped.length === 0) return markRow(data);
+  const result = { ...data };
+  for (const key of wrapped) result[key] = (data[key] as unknown[]).map(markRow);
+  return result;
 }
 
 /** 404 hints that depend on how the list was addressed, so they never suggest the form already used. */
@@ -126,7 +119,6 @@ export const listTools = [
       path: username === undefined ? '/lists/user' : apiPath`/lists/user/${username}`,
       query,
     }),
-    transformResult: (data) => markExternalLists(data),
   }),
 
   defineTool({
@@ -145,7 +137,7 @@ export const listTools = [
       path: LIST_SOURCES[source],
       query: PAGINATED_SOURCES.has(source) ? page : {},
     }),
-    transformResult: (data, { source }) => markExternalLists(data, source === 'external'),
+    transformResult: (data, { source }) => (source === 'external' ? markExternalLists(data) : data),
   }),
 
   defineTool({
@@ -159,7 +151,6 @@ export const listTools = [
     }),
     annotations: READ,
     toRequest: (query) => ({ method: 'GET', path: '/lists/search', query }),
-    transformResult: (data) => markExternalLists(data),
   }),
 
   defineTool({
@@ -170,7 +161,7 @@ export const listTools = [
     annotations: READ,
     errorHint: (status, { list }) => listNotFoundHint(status, list),
     toRequest: ({ list }) => ({ method: 'GET', path: listPath(list) }),
-    transformResult: (data, { list }) => markExternalLists(data, 'external_id' in list),
+    transformResult: (data, { list }) => ('external_id' in list ? markExternalLists(data) : data),
   }),
 
   defineTool({
@@ -208,7 +199,6 @@ export const listTools = [
       ),
     annotations: READ,
     toRequest: (query) => ({ method: 'GET', path: '/lists/user/membership', query }),
-    transformResult: (data) => markExternalLists(data),
   }),
 
   ...(['add', 'remove'] as const).map((action) =>

@@ -15,12 +15,16 @@ const textResult = (text: string, isError = false): CallToolResult => ({
   ...(isError && { isError }),
 });
 
-function errorText(error: unknown, tool: ToolDefinition, args: unknown): string {
+function errorText(
+  error: unknown,
+  tool: ToolDefinition,
+  args: Parameters<ToolDefinition['toRequest']>[0],
+): string {
   if (!(error instanceof MdblistApiError)) {
     return error instanceof Error ? error.message : String(error);
   }
   const retry = error.retryAfter === null ? '' : ` (retry after ${error.retryAfter}s)`;
-  const hint = tool.errorHint?.(error.status, args as Parameters<typeof tool.toRequest>[0]);
+  const hint = tool.errorHint?.(error.status, args);
   return `${error.message}${retry}${hint ? ` — ${hint}` : ''}`;
 }
 
@@ -29,15 +33,15 @@ async function callTool(
   tool: ToolDefinition,
   args: unknown,
 ): Promise<CallToolResult> {
+  const input = args as Parameters<typeof tool.toRequest>[0];
   try {
-    const input = args as Parameters<typeof tool.toRequest>[0];
     const raw = await client.request(tool.toRequest(input));
     const data = tool.transformResult ? tool.transformResult(raw, input) : raw;
     // Compact JSON: pretty-printing inflates large list payloads by ~40%.
     return textResult(JSON.stringify(data));
   } catch (error) {
     // Tool execution errors are reported in-band so the model can react (MCP spec: isError).
-    return textResult(errorText(error, tool, args), true);
+    return textResult(errorText(error, tool, input), true);
   }
 }
 
