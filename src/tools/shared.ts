@@ -16,6 +16,12 @@ export interface ToolDefinition<Schema extends z.ZodObject = z.ZodObject> {
   transformResult?(data: unknown, args: z.infer<Schema>): unknown;
 }
 
+/** errorHint for fixed hints keyed by HTTP status. */
+export const hintFor =
+  (hints: Partial<Record<number, string>>) =>
+  (status: number): string | undefined =>
+    hints[status];
+
 export const defineTool = <Schema extends z.ZodObject>(
   tool: ToolDefinition<Schema>,
 ): ToolDefinition => tool;

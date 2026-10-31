@@ -2,6 +2,7 @@ import * as z from 'zod';
 import { apiPath } from '../mdblist-client.js';
 import {
   defineTool,
+  hintFor,
   listId,
   listItemsParams,
   listItemsQuery,
@@ -82,13 +83,18 @@ export function markExternalLists(data: unknown): unknown {
 function listNotFoundHint(status: number, { list }: { list: ListRef }): string | undefined {
   if (status !== 404) return undefined;
   if ('id' in list) {
-    return "If this is an IMDb, Trakt or Letterboxd list (from browse_lists source 'external'), retry with list: {external_id: N} instead of {id: N}.";
+    return "Only if this number came from browse_lists source 'external' (an IMDb, Trakt or Letterboxd list), retry with list: {external_id: N}. Otherwise the list doesn't exist or isn't visible to you.";
   }
   if ('external_id' in list) {
     return "No connected external list has this external_id; get current values from browse_lists source 'external'.";
   }
   return undefined;
 }
+
+/** Write tools address lists by MDBList id only; external numbers never belong in list_id. */
+const WRITE_LIST_HINT = hintFor({
+  404: "list_id must be the id of one of your own MDBList lists (see get_user_lists). Numbers from browse_lists source 'external' are external_id values, not MDBList list IDs.",
+});
 
 const LIST_SOURCES = {
   top: '/lists/top',
@@ -205,6 +211,7 @@ export const listTools = [
       description: `${action === 'add' ? 'Add movies/shows to' : 'Remove movies/shows from'} one of the user's static lists.`,
       inputSchema: requireMedia(mediaIdLists.extend({ list_id: listId })),
       annotations: action === 'add' ? WRITE : REMOVE,
+      errorHint: WRITE_LIST_HINT,
       toRequest: ({ list_id, ...input }) => ({
         method: 'POST',
         path: apiPath`/lists/${list_id}/items/${action}`,
@@ -232,6 +239,7 @@ export const listTools = [
       "Permanently delete one of the user's static lists (dynamic, official and external lists cannot be deleted).",
     inputSchema: z.object({ list_id: listId }),
     annotations: REMOVE,
+    errorHint: WRITE_LIST_HINT,
     toRequest: ({ list_id }) => ({ method: 'DELETE', path: apiPath`/lists/${list_id}` }),
   }),
 ];

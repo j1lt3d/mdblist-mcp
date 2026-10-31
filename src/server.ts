@@ -15,11 +15,9 @@ const textResult = (text: string, isError = false): CallToolResult => ({
   ...(isError && { isError }),
 });
 
-function errorText(
-  error: unknown,
-  tool: ToolDefinition,
-  args: Parameters<ToolDefinition['toRequest']>[0],
-): string {
+type ToolArgs = Parameters<ToolDefinition['toRequest']>[0];
+
+function errorText(error: unknown, tool: ToolDefinition, args: ToolArgs): string {
   if (!(error instanceof MdblistApiError)) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -33,7 +31,7 @@ async function callTool(
   tool: ToolDefinition,
   args: unknown,
 ): Promise<CallToolResult> {
-  const input = args as Parameters<typeof tool.toRequest>[0];
+  const input = args as ToolArgs;
   try {
     const raw = await client.request(tool.toRequest(input));
     const data = tool.transformResult ? tool.transformResult(raw, input) : raw;

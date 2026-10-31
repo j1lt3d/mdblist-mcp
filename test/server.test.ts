@@ -215,6 +215,18 @@ describe('MCP server', () => {
       },
     );
 
+    it.each([
+      ['add_list_items', { list_id: 168348, movies: [{ tmdb: 278 }] }],
+      ['remove_list_items', { list_id: 168348, movies: [{ tmdb: 278 }] }],
+      ['delete_list', { list_id: 168348 }],
+    ])('%s explains that list_id takes MDBList ids, not external ones', async (name, args) => {
+      const client = await connect(notFound());
+      const result = await client.callTool({ name, arguments: args });
+      expect(text(result)).toMatch(
+        /^MDBList API error 404: Not found — list_id must be the id of one of your own MDBList lists/,
+      );
+    });
+
     it('adds no hint to other errors on {id}', async () => {
       const client = await connect(mockFetch(jsonResponse({ error: 'Oops' }, { status: 500 })));
       const result = await client.callTool({ name: 'get_list', arguments: { list: { id: 1 } } });
