@@ -177,7 +177,8 @@ describe('MCP server', () => {
       ['get_list', { list: { id: 14 } }],
     ])('%s keeps MDBList list ids as id, even with an external source', async (name, args) => {
       // These endpoints return MDBList lists, whose id is what {id} and list_id expect.
-      const body = { data: [{ id: 14, source: 'imdb' }] };
+      // A bare array (not a wrapper) so the test fails if the rename is ever applied here.
+      const body = [{ id: 14, source: 'imdb' }];
       const client = await connect(mockFetch(jsonResponse(body)));
       const result = await client.callTool({ name, arguments: args });
       expect(json(result)).toEqual(body);

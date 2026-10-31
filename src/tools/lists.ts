@@ -92,6 +92,9 @@ function listNotFoundHint(status: number, { list }: { list: ListRef }): string |
 }
 
 /** Write tools address lists by MDBList id only; external numbers never belong in list_id. */
+const writeListId = listId.describe(
+  "MDBList list ID of one of your own lists (from get_user_lists). Never an external_id from browse_lists source 'external'.",
+);
 const WRITE_LIST_HINT = hintFor({
   404: "list_id must be the id of one of your own MDBList lists (see get_user_lists). Numbers from browse_lists source 'external' are external_id values, not MDBList list IDs.",
 });
@@ -209,7 +212,7 @@ export const listTools = [
       name: `${action}_list_items`,
       title: `${action === 'add' ? 'Add' : 'Remove'} list items`,
       description: `${action === 'add' ? 'Add movies/shows to' : 'Remove movies/shows from'} one of the user's static lists.`,
-      inputSchema: requireMedia(mediaIdLists.extend({ list_id: listId })),
+      inputSchema: requireMedia(mediaIdLists.extend({ list_id: writeListId })),
       annotations: action === 'add' ? WRITE : REMOVE,
       errorHint: WRITE_LIST_HINT,
       toRequest: ({ list_id, ...input }) => ({
@@ -237,7 +240,7 @@ export const listTools = [
     title: 'Delete list',
     description:
       "Permanently delete one of the user's static lists (dynamic, official and external lists cannot be deleted).",
-    inputSchema: z.object({ list_id: listId }),
+    inputSchema: z.object({ list_id: writeListId }),
     annotations: REMOVE,
     errorHint: WRITE_LIST_HINT,
     toRequest: ({ list_id }) => ({ method: 'DELETE', path: apiPath`/lists/${list_id}` }),
