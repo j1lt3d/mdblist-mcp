@@ -126,4 +126,53 @@ describe('MCP server', () => {
     expect(text(result)).toMatch(/validation/i);
     expect(fetchFn).not.toHaveBeenCalled();
   });
+
+  describe('external lists', () => {
+    const externalRow = { id: 168348, name: 'British Crime Shows', source: 'imdb' };
+    const json = (result: Awaited<ReturnType<Client['callTool']>>) =>
+      JSON.parse(text(result) ?? '') as unknown;
+
+    it('browse_lists returns external lists keyed by external_id', async () => {
+      const client = await connect(mockFetch(jsonResponse([externalRow])));
+      const result = await client.callTool({
+        name: 'browse_lists',
+        arguments: { source: 'external' },
+      });
+      expect(json(result)).toEqual([
+        { external_id: 168348, name: 'British Crime Shows', source: 'imdb' },
+      ]);
+    });
+
+    it('browse_lists leaves MDBList list ids alone', async () => {
+      const client = await connect(mockFetch(jsonResponse([{ id: 14, name: 'Top' }])));
+      const result = await client.callTool({ name: 'browse_lists', arguments: { source: 'top' } });
+      expect(json(result)).toEqual([{ id: 14, name: 'Top' }]);
+    });
+
+    it('get_list by external_id returns the list keyed by external_id', async () => {
+      const fetchFn = mockFetch(jsonResponse([externalRow]));
+      const client = await connect(fetchFn);
+      const result = await client.callTool({
+        name: 'get_list',
+        arguments: { list: { external_id: 168348 } },
+      });
+      expect(fetchCall(fetchFn).url.pathname).toBe('/external/lists/168348');
+      expect(json(result)).toEqual([expect.objectContaining({ external_id: 168348 })]);
+    });
+
+    it('get_list by id leaves the MDBList id alone', async () => {
+      const client = await connect(mockFetch(jsonResponse([{ id: 14, name: 'Mine' }])));
+      const result = await client.callTool({ name: 'get_list', arguments: { list: { id: 14 } } });
+      expect(json(result)).toEqual([{ id: 14, name: 'Mine' }]);
+    });
+
+    it.each(['get_list', 'get_list_items'])('%s points a 404 at {external_id}', async (name) => {
+      const client = await connect(
+        mockFetch(jsonResponse({ error: 'Not found' }, { status: 404 })),
+      );
+      const result = await client.callTool({ name, arguments: { list: { id: 168348 } } });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toMatch(/^MDBList API error 404: Not found — .*\{external_id: N\}/);
+    });
+  });
 });

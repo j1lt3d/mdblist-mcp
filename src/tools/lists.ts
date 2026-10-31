@@ -50,6 +50,24 @@ function listPath(list: ListRef): string {
   return apiPath`/external/lists/${list.external_id}`;
 }
 
+/**
+ * External (IMDb, Trakt, Letterboxd) list rows carry a plain `id` that only works as
+ * {external_id}: passed as {id} it hits /lists/{id}, which 404s or, worse, returns an
+ * unrelated MDBList list with the same number. Renaming the key lets the model copy it
+ * into the right field.
+ */
+export function markExternalLists(data: unknown): unknown {
+  if (!Array.isArray(data)) return data;
+  return data.map((row: unknown) => {
+    if (typeof row !== 'object' || row === null || !('id' in row)) return row;
+    const { id, ...rest } = row as Record<string, unknown>;
+    return { external_id: id, ...rest };
+  });
+}
+
+const EXTERNAL_ID_HINT =
+  "If this is an IMDb, Trakt or Letterboxd list (from browse_lists source 'external'), retry with list: {external_id: N} instead of {id: N}.";
+
 const LIST_SOURCES = {
   top: '/lists/top',
   curated: '/lists/curated',
@@ -82,7 +100,7 @@ export const listTools = [
     name: 'browse_lists',
     title: 'Browse lists',
     description:
-      'Browse lists: top public lists, curated lists, your liked lists, official MDBList lists, or your connected external lists.',
+      'Browse lists: top public lists, curated lists, your liked lists, official MDBList lists, or your connected external lists. External lists are returned with external_id: pass it to get_list/get_list_items as list: {external_id}.',
     inputSchema: z.object({
       source: z.enum(['top', 'curated', 'liked', 'official', 'external']),
       limit: z.number().int().positive().optional().describe('top, curated and liked only'),
@@ -94,6 +112,7 @@ export const listTools = [
       path: LIST_SOURCES[source],
       query: PAGINATED_SOURCES.has(source) ? page : {},
     }),
+    transformResult: (data, { source }) => (source === 'external' ? markExternalLists(data) : data),
   }),
 
   defineTool({
@@ -115,7 +134,9 @@ export const listTools = [
     description: 'Get metadata (name, owner, item count, likes) of a list.',
     inputSchema: z.object({ list: listRef }),
     annotations: READ,
+    errorHints: { 404: EXTERNAL_ID_HINT },
     toRequest: ({ list }) => ({ method: 'GET', path: listPath(list) }),
+    transformResult: (data, { list }) => ('external_id' in list ? markExternalLists(data) : data),
   }),
 
   defineTool({
@@ -124,6 +145,7 @@ export const listTools = [
     description: 'Get the movies and shows in a list, with filtering, sorting and pagination.',
     inputSchema: listItemsQuery.extend({ list: listRef }),
     annotations: READ,
+    errorHints: { 404: EXTERNAL_ID_HINT },
     toRequest: ({ list, ...query }) => ({
       method: 'GET',
       path: `${listPath(list)}/items`,

@@ -30,7 +30,9 @@ async function callTool(
   args: unknown,
 ): Promise<CallToolResult> {
   try {
-    const data = await client.request(tool.toRequest(args as Parameters<typeof tool.toRequest>[0]));
+    const input = args as Parameters<typeof tool.toRequest>[0];
+    const raw = await client.request(tool.toRequest(input));
+    const data = tool.transformResult ? tool.transformResult(raw, input) : raw;
     // Compact JSON: pretty-printing inflates large list payloads by ~40%.
     return textResult(JSON.stringify(data));
   } catch (error) {

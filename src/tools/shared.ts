@@ -12,6 +12,8 @@ export interface ToolDefinition<Schema extends z.ZodObject = z.ZodObject> {
   errorHints?: Partial<Record<number, string>>;
   // Method syntax keeps the parameter bivariant so heterogeneous tools fit in one array.
   toRequest(args: z.infer<Schema>): ApiRequest;
+  /** Rewrites the API response before it reaches the model. */
+  transformResult?(data: unknown, args: z.infer<Schema>): unknown;
 }
 
 export const defineTool = <Schema extends z.ZodObject>(

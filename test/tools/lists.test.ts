@@ -1,4 +1,5 @@
-import { listTools } from '../../src/tools/lists.js';
+import { describe, expect, it } from 'vitest';
+import { listTools, markExternalLists } from '../../src/tools/lists.js';
 import { describeTools } from './harness.js';
 
 describeTools(
@@ -150,3 +151,21 @@ describeTools(
     ['add_list_items', { list_id: 1 }],
   ],
 );
+
+describe('markExternalLists', () => {
+  it('renames id to external_id on each row', () => {
+    expect(markExternalLists([{ id: 1, name: 'a' }, { id: 2 }])).toEqual([
+      { external_id: 1, name: 'a' },
+      { external_id: 2 },
+    ]);
+  });
+
+  it.each([{ error: 'x' }, null, 'text'])('passes non-array responses through (%j)', (data) => {
+    expect(markExternalLists(data)).toBe(data);
+  });
+
+  it('leaves rows without an id untouched', () => {
+    const rows = [{ name: 'a' }, null, 3];
+    expect(markExternalLists(rows)).toEqual(rows);
+  });
+});
