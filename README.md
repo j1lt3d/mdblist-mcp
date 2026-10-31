@@ -136,28 +136,58 @@ Try _"What's on my MDBList watchlist?"_ to check that it works.
 
 ### Alternative: Docker
 
-If you'd rather not install Node.js, build the image from the cloned repo:
-
-```sh
-git clone https://github.com/j1lt3d/mdblist-mcp.git
-cd mdblist-mcp
-docker build -t mdblist-mcp .
-```
+If you'd rather not install Node.js, use the published image
+(`linux/amd64` and `linux/arm64`):
 
 ```json
 {
   "mcpServers": {
     "mdblist": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "MDBLIST_API_KEY", "mdblist-mcp"],
+      "args": ["run", "-i", "--rm", "-e", "MDBLIST_API_KEY", "ghcr.io/j1lt3d/mdblist-mcp"],
       "env": { "MDBLIST_API_KEY": "your-api-key" }
     }
   }
 }
 ```
 
+Tags: `latest`, `X.Y.Z` and `X.Y`. To build it yourself, run
+`docker build -t mdblist-mcp .` in the cloned repo.
+
 The container runs as an unprivileged user, and its application files are
 read-only.
+
+### Alternative: Streamable HTTP
+
+To run the server as a long-lived network service (for example on a home
+server shared by several clients), set `MCP_TRANSPORT=http`:
+
+```sh
+docker run -d --name mdblist-mcp -p 3000:3000 \
+  -e MDBLIST_API_KEY=your-api-key \
+  -e MCP_TRANSPORT=http \
+  -e MCP_AUTH_TOKEN=a-long-random-secret \
+  ghcr.io/j1lt3d/mdblist-mcp
+```
+
+Clients then connect to `http://your-host:3000/mcp` and send the token as a
+bearer token. For example, in Claude Code:
+
+```sh
+claude mcp add --transport http mdblist http://your-host:3000/mcp \
+  --header "Authorization: Bearer a-long-random-secret"
+```
+
+`GET /healthz` returns `200 ok` without authentication, for container health
+checks. Without Docker, run
+`MCP_TRANSPORT=http MDBLIST_API_KEY=… node dist/index.js`, which listens on
+`127.0.0.1:3000` by default.
+
+> [!WARNING]
+> Every HTTP client shares your MDBList API key, including tools that change
+> your lists, ratings and watch history. Always set `MCP_AUTH_TOKEN` when the
+> port is reachable by anyone else, and put the server behind HTTPS (a reverse
+> proxy) if it leaves your local network.
 
 ## Available tools
 
@@ -256,9 +286,13 @@ management are left out on purpose.
 | Environment variable | Required | Description                                                                   |
 | -------------------- | -------- | ----------------------------------------------------------------------------- |
 | `MDBLIST_API_KEY`    | Yes      | Your API key from [mdblist.com/preferences](https://mdblist.com/preferences/) |
+| `MCP_TRANSPORT`      | No       | `stdio` (default) or `http`                                                   |
+| `HOST`               | No       | HTTP bind address. Defaults to `127.0.0.1` (`0.0.0.0` in the Docker image)    |
+| `PORT`               | No       | HTTP port. Defaults to `3000`                                                 |
+| `MCP_AUTH_TOKEN`     | No       | If set, HTTP clients must send `Authorization: Bearer <token>`                |
 
-The server communicates over stdio and only contacts `api.mdblist.com`. It
-doesn't collect any data or send it anywhere else. API errors, including rate
+The server communicates over stdio by default, or Streamable HTTP at `/mcp`
+when `MCP_TRANSPORT=http`. It only contacts `api.mdblist.com`, and doesn't collect any data or send it anywhere else. API errors, including rate
 limits (`429` with `Retry-After`), are passed back to the assistant so it can
 explain them or try again.
 
@@ -280,8 +314,8 @@ calls to the MDBList API.
 
 ### Which AI apps does it work with?
 
-Any MCP client that supports local (stdio) servers. That includes Claude
-Desktop, Claude Code, Cursor, Windsurf, Cline, VS Code with GitHub Copilot, and
+Any MCP client that supports local (stdio) or Streamable HTTP servers. That
+includes Claude Desktop, Claude Code, Cursor, Windsurf, Cline, VS Code with GitHub Copilot, and
 others. It supports MCP specification 2026-07-28, and older 2025 clients still
 work.
 
@@ -330,6 +364,13 @@ and a request test case in `test/tools/<domain>.test.ts`.
 
 CI checks formatting, lint, types, tests with coverage, the build, `npm audit`,
 npm signature verification and the Dockerfile (hadolint).
+
+Releases are automated with
+[semantic-release](https://github.com/semantic-release/semantic-release). PR
+titles must follow [Conventional Commits](https://www.conventionalcommits.org)
+(`feat:`, `fix:`, …), since squash-merged titles decide the next version. Each
+release on `main` updates `CHANGELOG.md`, tags `vX.Y.Z`, creates a GitHub
+release, and pushes the image to `ghcr.io/j1lt3d/mdblist-mcp`.
 
 Contributions are welcome. Please open an issue or pull request.
 

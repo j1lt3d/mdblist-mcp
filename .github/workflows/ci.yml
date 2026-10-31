@@ -1,9 +1,9 @@
 name: 🚦 CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  # Pushes to main run CI through release.yml, which gates the release on it.
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.ref }}
