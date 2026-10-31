@@ -1,0 +1,75 @@
+{
+  "name": "mdblist-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for MDBList: let Claude, Cursor and other AI assistants search movies and TV shows, compare IMDb, Rotten Tomatoes, Metacritic and Letterboxd ratings, and manage lists, watchlist and watch history.",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "mdblist",
+    "claude",
+    "claude-desktop",
+    "cursor",
+    "ai",
+    "llm",
+    "movies",
+    "tv-shows",
+    "ratings",
+    "imdb",
+    "rotten-tomatoes",
+    "letterboxd",
+    "trakt",
+    "watchlist"
+  ],
+  "homepage": "https://github.com/j1lt3d/mdblist-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/j1lt3d/mdblist-mcp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/j1lt3d/mdblist-mcp.git"
+  },
+  "license": "MIT",
+  "author": "j1lt3d",
+  "type": "module",
+  "bin": {
+    "mdblist-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/client": "^2.3.0",
+    "@types/node": "^24.19.1",
+    "@vitest/coverage-v8": "^5.0.3",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  },
+  "overrides": {
+    "minimatch": "^11.0.3"
+  }
+}

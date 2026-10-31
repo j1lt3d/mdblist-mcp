@@ -1,0 +1,64 @@
+name: 🚦 CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: 🔍 Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v6
+
+      - name: 🟢 Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🎨 Check formatting
+        run: npm run format:check
+
+      - name: 🧹 Lint
+        run: npm run lint
+
+      - name: 🔤 Type check
+        run: npm run typecheck
+
+      - name: 🧪 Test with coverage
+        run: npm run test:coverage
+
+      - name: 🏗️ Build
+        run: npm run build
+
+      - name: 🛡️ Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: ✍️ Verify package signatures
+        run: npm audit signatures
+
+      - name: 🐳 Lint Dockerfile
+        env:
+          HADOLINT_VERSION: v2.15.1
+        run: |
+          asset="hadolint-linux-$(uname -m | sed 's/aarch64/arm64/')"
+          base="https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}"
+          curl -fsSLO "${base}/${asset}" -O "${base}/checksums.sha256"
+          grep " \*${asset}\$" checksums.sha256 | sha256sum -c -
+          chmod +x "${asset}"
+          "./${asset}" Dockerfile
+          rm "${asset}" checksums.sha256
