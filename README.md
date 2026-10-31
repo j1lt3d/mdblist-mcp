@@ -178,6 +178,11 @@ claude mcp add --transport http mdblist http://your-host:3000/mcp \
   --header "Authorization: Bearer a-long-random-secret"
 ```
 
+Requests from browsers are only accepted from localhost pages by default. To
+use a browser-based client served from another host, list its hostname in
+`MCP_ALLOWED_ORIGINS` (for example `mdblist.lan`). Other clients don't send an
+`Origin` header and aren't affected.
+
 `GET /healthz` returns `200 ok` without authentication, for container health
 checks. Without Docker, run
 `MCP_TRANSPORT=http MDBLIST_API_KEY=… node dist/index.js`, which listens on
@@ -283,13 +288,14 @@ management are left out on purpose.
 
 ## Configuration
 
-| Environment variable | Required | Description                                                                   |
-| -------------------- | -------- | ----------------------------------------------------------------------------- |
-| `MDBLIST_API_KEY`    | Yes      | Your API key from [mdblist.com/preferences](https://mdblist.com/preferences/) |
-| `MCP_TRANSPORT`      | No       | `stdio` (default) or `http`                                                   |
-| `HOST`               | No       | HTTP bind address. Defaults to `127.0.0.1` (`0.0.0.0` in the Docker image)    |
-| `PORT`               | No       | HTTP port. Defaults to `3000`                                                 |
-| `MCP_AUTH_TOKEN`     | No       | If set, HTTP clients must send `Authorization: Bearer <token>`                |
+| Environment variable  | Required | Description                                                                                                         |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `MDBLIST_API_KEY`     | Yes      | Your API key from [mdblist.com/preferences](https://mdblist.com/preferences/)                                       |
+| `MCP_TRANSPORT`       | No       | `stdio` (default) or `http`                                                                                         |
+| `HOST`                | No       | HTTP bind address. Defaults to `127.0.0.1` (`0.0.0.0` in the Docker image)                                          |
+| `PORT`                | No       | HTTP port. Defaults to `3000`                                                                                       |
+| `MCP_AUTH_TOKEN`      | No       | If set, HTTP clients must send `Authorization: Bearer <token>`                                                      |
+| `MCP_ALLOWED_ORIGINS` | No       | Comma-separated hostnames (no scheme or port) that browser-based clients may connect from, in addition to localhost |
 
 The server communicates over stdio by default, or Streamable HTTP at `/mcp`
 when `MCP_TRANSPORT=http`. It only contacts `api.mdblist.com`, and doesn't collect any data or send it anywhere else. API errors, including rate

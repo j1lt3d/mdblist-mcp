@@ -6,6 +6,8 @@ export interface Config {
   host: string;
   port: number;
   authToken?: string;
+  /** Extra browser Origin hostnames allowed in HTTP mode, on top of localhost. */
+  allowedOrigins: string[];
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -28,11 +30,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const authToken = env.MCP_AUTH_TOKEN?.trim();
+  const allowedOrigins = (env.MCP_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim().toLowerCase())
+    .filter(Boolean);
+  for (const origin of allowedOrigins) {
+    if (origin.includes('/') || /:\d+$/.test(origin)) {
+      throw new Error(
+        `MCP_ALLOWED_ORIGINS takes hostnames only, without scheme or port (got "${origin}")`,
+      );
+    }
+  }
   return {
     apiKey,
     transport,
     host: env.HOST?.trim() || '127.0.0.1',
     port,
+    allowedOrigins,
     ...(authToken && { authToken }),
   };
 }

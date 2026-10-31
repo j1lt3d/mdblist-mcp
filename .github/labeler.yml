@@ -32,6 +32,7 @@ labels:
   - label: 'dependencies'
     files:
       - "^package(-lock)?\\.json$"
+      - "^\\.github/release/package(-lock)?\\.json$"
       - "^\\.nvmrc$"
 
   - label: 'refactor'

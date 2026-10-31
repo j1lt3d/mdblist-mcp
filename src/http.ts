@@ -22,7 +22,8 @@ export interface HttpServerHandle {
   close: () => Promise<void>;
 }
 
-type HttpConfig = Pick<Config, 'host' | 'port' | 'authToken'>;
+type HttpConfig = Pick<Config, 'host' | 'port' | 'authToken'> &
+  Partial<Pick<Config, 'allowedOrigins'>>;
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 
@@ -76,6 +77,7 @@ export async function startHttpServer(
   const handler = createMcpHandler(factory, { onerror });
   const expectedToken = config.authToken ? digest(config.authToken) : undefined;
   const checkHost = LOOPBACK_HOSTS.has(config.host);
+  const allowedOrigins = [...localhostAllowedOrigins(), ...(config.allowedOrigins ?? [])];
 
   async function handle(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
@@ -85,7 +87,7 @@ export async function startHttpServer(
       (checkHost
         ? hostHeaderValidationResponse(request, localhostAllowedHostnames())
         : undefined) ??
-      originValidationResponse(request, localhostAllowedOrigins()) ??
+      originValidationResponse(request, allowedOrigins) ??
       authResponse(request, expectedToken) ??
       handler.fetch(request)
     );
@@ -96,7 +98,15 @@ export async function startHttpServer(
     res.on('close', () => {
       if (!res.writableFinished) abort.abort();
     });
-    handle(toRequest(req, abort.signal))
+    let request: Request;
+    try {
+      request = toRequest(req, abort.signal);
+    } catch {
+      // e.g. an absolute-form request target with an invalid port
+      res.writeHead(400).end('Bad Request');
+      return;
+    }
+    handle(request)
       .then((response) => writeResponse(response, res))
       .catch((error: unknown) => {
         if (abort.signal.aborted) return;
@@ -113,6 +123,8 @@ export async function startHttpServer(
       resolve();
     });
   });
+  // Report later server errors (e.g. EMFILE on accept) instead of crashing.
+  server.on('error', onerror);
 
   const { port } = server.address() as AddressInfo;
   const host = config.host.includes(':') ? `[${config.host}]` : config.host;

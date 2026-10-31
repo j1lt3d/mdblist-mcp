@@ -27,41 +27,41 @@ jobs:
       issues: write
       pull-requests: write
     outputs:
-      released: ${{ steps.result.outputs.released }}
-      version: ${{ steps.result.outputs.version }}
-      tag: ${{ steps.result.outputs.tag }}
+      released: ${{ steps.release.outputs.released }}
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: 📥 Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
       - name: 🟢 Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: .nvmrc
 
-      # Run from npx rather than devDependencies: semantic-release bundles its own
-      # copy of npm, whose transitive advisories would fail CI's `npm audit`.
+      # The toolchain lives in its own lockfile so every transitive dependency is
+      # pinned, and its bundled copy of npm stays out of the app's `npm audit`.
+      - name: 📦 Install release tooling
+        run: npm ci --prefix .github/release --ignore-scripts --no-audit --no-fund
+
+      # Releasing is detected by comparing the latest tag before and after, so a
+      # run that releases nothing (e.g. a manual re-run) never republishes images.
       - name: 🏷️ Run semantic-release
+        id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          npx --yes
-          -p semantic-release@25.0.9
-          -p @semantic-release/changelog@7.0.0
-          -p @semantic-release/git@11.0.1
-          semantic-release
-
-      - name: 📤 Export result
-        id: result
         run: |
-          tag=$(git tag --points-at HEAD --list 'v*' | head -n1)
-          if [ -n "$tag" ]; then
+          latest_tag() { git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true; }
+          before=$(latest_tag)
+          .github/release/node_modules/.bin/semantic-release
+          after=$(latest_tag)
+          if [ -n "$after" ] && [ "$after" != "$before" ]; then
             {
               echo "released=true"
-              echo "tag=$tag"
-              echo "version=${tag#v}"
+              echo "tag=$after"
+              echo "version=${after#v}"
             } >> "$GITHUB_OUTPUT"
           else
             echo "released=false" >> "$GITHUB_OUTPUT"
@@ -78,7 +78,7 @@ jobs:
       packages: write
     steps:
       - name: 📥 Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ needs.semantic-release.outputs.tag }}
 

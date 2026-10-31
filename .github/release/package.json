@@ -1,0 +1,10 @@
+{
+  "name": "mdblist-mcp-release-tooling",
+  "private": true,
+  "description": "Pinned semantic-release toolchain used only by .github/workflows/release.yml. Kept out of the root package so its bundled npm copy doesn't affect the app's npm audit.",
+  "dependencies": {
+    "@semantic-release/changelog": "7.0.0",
+    "@semantic-release/git": "11.0.1",
+    "semantic-release": "25.0.9"
+  }
+}

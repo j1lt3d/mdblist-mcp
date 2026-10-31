@@ -1,5 +1,6 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { request } from 'node:http';
+import { connect as netConnect } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startHttpServer, type HttpServerHandle } from '../src/http.js';
 import { createServer } from '../src/server.js';
@@ -8,17 +9,22 @@ import { clientWith, mockFetch } from './helpers.js';
 
 const TOKEN = 'test-token';
 const closers: (() => Promise<void>)[] = [];
+const onerror = vi.fn();
 
 afterEach(async () => {
   await Promise.all(closers.splice(0).map((close) => close()));
+  expect(onerror).not.toHaveBeenCalled();
+  onerror.mockReset();
 });
 
-const onerror = vi.fn();
-
-async function start(authToken?: string, host = '127.0.0.1'): Promise<HttpServerHandle> {
+async function start(
+  authToken?: string,
+  host = '127.0.0.1',
+  allowedOrigins: string[] = [],
+): Promise<HttpServerHandle> {
   const handle = await startHttpServer(
     () => createServer(clientWith(mockFetch())),
-    { host, port: 0, ...(authToken && { authToken }) },
+    { host, port: 0, allowedOrigins, ...(authToken && { authToken }) },
     onerror,
   );
   closers.push(handle.close);
@@ -89,6 +95,24 @@ describe('HTTP transport', () => {
     expect(response.status).toBe(403);
   });
 
+  it('allows browser origins listed in allowedOrigins', async () => {
+    const { url } = await start(TOKEN, '127.0.0.1', ['mdblist.lan']);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://mdblist.lan:8080' },
+      body: '{}',
+    });
+    // Passes the Origin check and reaches the token check instead.
+    expect(response.status).toBe(401);
+  });
+
+  it('answers 400 to an unparseable request target instead of crashing', async () => {
+    const { url } = await start();
+    expect(await rawStatus(url, 'GET http://a:99999/ HTTP/1.1\r\nHost: a\r\n\r\n')).toBe(400);
+    // The server is still up.
+    expect((await fetch(new URL('/healthz', url))).status).toBe(200);
+  });
+
   it('rejects a foreign Host header when bound to loopback (DNS rebinding)', async () => {
     const { url } = await start();
     expect(await postStatus(url, 'evil.example')).toBe(403);
@@ -125,5 +149,18 @@ function postStatus(url: URL, host: string): Promise<number | undefined> {
     );
     req.on('error', reject);
     req.end('{}');
+  });
+}
+
+/** Sends a raw HTTP request and returns the status code from the response line. */
+function rawStatus(url: URL, raw: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const socket = netConnect(Number(url.port), url.hostname, () => socket.end(raw));
+    let data = '';
+    socket.on('data', (chunk: Buffer) => (data += chunk.toString()));
+    socket.on('end', () => {
+      resolve(Number(/^HTTP\/1\.1 (\d{3})/.exec(data)?.[1]));
+    });
+    socket.on('error', reject);
   });
 }

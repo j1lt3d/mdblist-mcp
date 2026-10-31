@@ -1,7 +1,10 @@
 name: 🏷️ Label PR
 
 on:
-  pull_request:
+  # pull_request_target gives fork PRs a write token for labels. Safe because
+  # this workflow never checks out or runs PR code; the labeler only reads
+  # the title and changed-file list through the API.
+  pull_request_target:
     types: [opened, edited, synchronize, reopened]
 
 permissions:

@@ -10,6 +10,7 @@ describe('loadConfig', () => {
       transport: 'stdio',
       host: '127.0.0.1',
       port: 3000,
+      allowedOrigins: [],
     });
   });
 
@@ -34,6 +35,7 @@ describe('loadConfig', () => {
       transport: 'http',
       host: '0.0.0.0',
       port: 8080,
+      allowedOrigins: [],
       authToken: 'secret',
     });
   });
@@ -49,4 +51,17 @@ describe('loadConfig', () => {
   it.each(['0', '65536', '3.5', 'abc', '-1'])('rejects PORT=%s', (PORT) => {
     expect(() => loadConfig({ ...base, PORT })).toThrow(/PORT/);
   });
+
+  it('parses MCP_ALLOWED_ORIGINS as a hostname list', () => {
+    expect(
+      loadConfig({ ...base, MCP_ALLOWED_ORIGINS: ' MDBList.lan, ,192.168.1.5 ' }).allowedOrigins,
+    ).toEqual(['mdblist.lan', '192.168.1.5']);
+  });
+
+  it.each(['http://mdblist.lan', 'mdblist.lan:3000'])(
+    'rejects MCP_ALLOWED_ORIGINS=%s',
+    (MCP_ALLOWED_ORIGINS) => {
+      expect(() => loadConfig({ ...base, MCP_ALLOWED_ORIGINS })).toThrow(/MCP_ALLOWED_ORIGINS/);
+    },
+  );
 });
