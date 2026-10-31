@@ -25,7 +25,11 @@ try {
         'Warning: MCP_AUTH_TOKEN is not set, so anyone who can reach this port can use your MDBList API key.',
       );
     }
+    let closing = false;
     const shutdown = () => {
+      // SIGINT and SIGTERM can both arrive (e.g. Ctrl-C during docker stop); close once.
+      if (closing) return;
+      closing = true;
       close().then(
         () => process.exit(0),
         (error: unknown) => {

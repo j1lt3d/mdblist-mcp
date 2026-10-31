@@ -118,6 +118,14 @@ describe('HTTP transport', () => {
     expect(await postStatus(url, 'evil.example')).toBe(403);
   });
 
+  it.each(['127.0.0.2', '0:0:0:0:0:0:0:1'])(
+    'keeps the DNS-rebinding Host check for loopback address %s',
+    async (host) => {
+      const { url } = await start(undefined, host);
+      expect(await postStatus(url, 'evil.example')).toBe(403);
+    },
+  );
+
   it('accepts any Host header when bound to all interfaces', async () => {
     const { url } = await start(TOKEN, '0.0.0.0');
     // Passes the Host check and reaches the token check instead.
@@ -129,7 +137,7 @@ describe('HTTP transport', () => {
     await expect(
       startHttpServer(
         () => createServer(clientWith(mockFetch())),
-        { host: '127.0.0.1', port: Number(url.port) },
+        { host: '127.0.0.1', port: Number(url.port), allowedOrigins: [] },
         onerror,
       ),
     ).rejects.toThrow(/EADDRINUSE/);

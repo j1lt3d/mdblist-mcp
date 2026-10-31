@@ -11,7 +11,7 @@ RUN npm run build && npm prune --omit=dev \
 
 FROM node:24-alpine
 # Defaults to stdio; set MCP_TRANSPORT=http to serve Streamable HTTP on $PORT at /mcp.
-ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
+ENV NODE_ENV=production MCP_HOST=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules

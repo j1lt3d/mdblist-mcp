@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { BlockList, isIPv4, isIPv6, type AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
@@ -15,15 +15,23 @@ import {
 import type { Config } from './config.js';
 
 export const MCP_PATH = '/mcp';
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+const LOOPBACK = new BlockList();
+LOOPBACK.addSubnet('127.0.0.0', 8, 'ipv4');
+LOOPBACK.addAddress('::1', 'ipv6');
+
+/** True for `localhost` and every loopback address form (127.0.0.0/8, ::1 however written). */
+function isLoopback(host: string): boolean {
+  if (host === 'localhost') return true;
+  if (isIPv4(host)) return LOOPBACK.check(host, 'ipv4');
+  return isIPv6(host) && LOOPBACK.check(host, 'ipv6');
+}
 
 export interface HttpServerHandle {
   url: URL;
   close: () => Promise<void>;
 }
 
-type HttpConfig = Pick<Config, 'host' | 'port' | 'authToken'> &
-  Partial<Pick<Config, 'allowedOrigins'>>;
+type HttpConfig = Pick<Config, 'host' | 'port' | 'authToken' | 'allowedOrigins'>;
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 
@@ -76,8 +84,8 @@ export async function startHttpServer(
 ): Promise<HttpServerHandle> {
   const handler = createMcpHandler(factory, { onerror });
   const expectedToken = config.authToken ? digest(config.authToken) : undefined;
-  const checkHost = LOOPBACK_HOSTS.has(config.host);
-  const allowedOrigins = [...localhostAllowedOrigins(), ...(config.allowedOrigins ?? [])];
+  const checkHost = isLoopback(config.host);
+  const allowedOrigins = [...localhostAllowedOrigins(), ...config.allowedOrigins];
 
   async function handle(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
