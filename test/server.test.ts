@@ -92,6 +92,15 @@ describe('MCP server', () => {
     );
   });
 
+  it('adds no tool hint to errors with other statuses', async () => {
+    const client = await connect(mockFetch(jsonResponse({ error: 'Not found' }, { status: 404 })));
+    const result = await client.callTool({
+      name: 'get_watch_providers',
+      arguments: { provider: 'tmdb', media_type: 'movie', id: '278' },
+    });
+    expect(text(result)).toBe('MDBList API error 404: Not found');
+  });
+
   it('reports network failures as tool errors', async () => {
     const fetchFn = mockFetch();
     fetchFn.mockRejectedValueOnce(new TypeError('fetch failed'));
@@ -125,5 +134,114 @@ describe('MCP server', () => {
     expect(result.isError).toBe(true);
     expect(text(result)).toMatch(/validation/i);
     expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  describe('external lists', () => {
+    const externalRow = { id: 168348, name: 'British Crime Shows', source: 'imdb' };
+    const json = (result: Awaited<ReturnType<Client['callTool']>>) =>
+      JSON.parse(text(result) ?? '') as unknown;
+
+    it('browse_lists returns external lists keyed by external_id', async () => {
+      const client = await connect(mockFetch(jsonResponse([externalRow])));
+      const result = await client.callTool({
+        name: 'browse_lists',
+        arguments: { source: 'external' },
+      });
+      expect(json(result)).toEqual([
+        { external_id: 168348, name: 'British Crime Shows', source: 'imdb' },
+      ]);
+    });
+
+    it('browse_lists leaves MDBList list ids alone', async () => {
+      const client = await connect(mockFetch(jsonResponse([{ id: 14, name: 'Top' }])));
+      const result = await client.callTool({ name: 'browse_lists', arguments: { source: 'top' } });
+      expect(json(result)).toEqual([{ id: 14, name: 'Top' }]);
+    });
+
+    it('get_list by external_id returns the list keyed by external_id', async () => {
+      const fetchFn = mockFetch(jsonResponse([externalRow]));
+      const client = await connect(fetchFn);
+      const result = await client.callTool({
+        name: 'get_list',
+        arguments: { list: { external_id: 168348 } },
+      });
+      expect(fetchCall(fetchFn).url.pathname).toBe('/external/lists/168348');
+      expect(json(result)).toEqual([expect.objectContaining({ external_id: 168348 })]);
+    });
+
+    it.each([
+      ['get_user_lists', {}],
+      ['search_lists', { query: 'x' }],
+      ['get_list_membership', { mediatype: 'show', tmdb: 96677 }],
+      ['browse_lists', { source: 'liked' }],
+      ['get_list', { list: { id: 14 } }],
+    ])('%s keeps MDBList list ids as id, even with an external source', async (name, args) => {
+      // These endpoints return MDBList lists, whose id is what {id} and list_id expect.
+      // A bare array (not a wrapper) so the test fails if the rename is ever applied here.
+      const body = [{ id: 14, source: 'imdb' }];
+      const client = await connect(mockFetch(jsonResponse(body)));
+      const result = await client.callTool({ name, arguments: args });
+      expect(json(result)).toEqual(body);
+    });
+
+    it('get_list by external_id renames a single-object response', async () => {
+      const client = await connect(mockFetch(jsonResponse(externalRow)));
+      const result = await client.callTool({
+        name: 'get_list',
+        arguments: { list: { external_id: 168348 } },
+      });
+      expect(json(result)).toEqual(expect.objectContaining({ external_id: 168348 }));
+      expect(json(result)).not.toHaveProperty('id');
+    });
+
+    const notFound = () => mockFetch(jsonResponse({ error: 'Not found' }, { status: 404 }));
+
+    it.each(['get_list', 'get_list_items'])(
+      '%s points an {id} 404 at {external_id}',
+      async (name) => {
+        const client = await connect(notFound());
+        const result = await client.callTool({ name, arguments: { list: { id: 168348 } } });
+        expect(result.isError).toBe(true);
+        expect(text(result)).toMatch(/^MDBList API error 404: Not found — .*\{external_id: N\}/);
+      },
+    );
+
+    it.each(['get_list', 'get_list_items'])(
+      '%s points an {external_id} 404 back at browse_lists, not at {external_id}',
+      async (name) => {
+        const client = await connect(notFound());
+        const result = await client.callTool({ name, arguments: { list: { external_id: 999 } } });
+        expect(text(result)).toMatch(/^MDBList API error 404: Not found — .*browse_lists/);
+        expect(text(result)).not.toMatch(/retry with/);
+      },
+    );
+
+    it.each([
+      ['add_list_items', { list_id: 168348, movies: [{ tmdb: 278 }] }],
+      ['remove_list_items', { list_id: 168348, movies: [{ tmdb: 278 }] }],
+      ['delete_list', { list_id: 168348 }],
+    ])('%s explains that list_id takes MDBList ids, not external ones', async (name, args) => {
+      const client = await connect(notFound());
+      const result = await client.callTool({ name, arguments: args });
+      expect(text(result)).toMatch(
+        /^MDBList API error 404: Not found — list_id must be the id of one of your own MDBList lists/,
+      );
+    });
+
+    it('adds no hint to other errors on {id}', async () => {
+      const client = await connect(mockFetch(jsonResponse({ error: 'Oops' }, { status: 500 })));
+      const result = await client.callTool({ name: 'get_list', arguments: { list: { id: 1 } } });
+      expect(text(result)).toBe('MDBList API error 500: Oops');
+    });
+
+    it.each([
+      { username: 'jane', listname: 'best' },
+      { official: 'trending' },
+      { share_token: 'abc' },
+    ])('adds no hint to a 404 for list %j', async (list) => {
+      const client = await connect(notFound());
+      const result = await client.callTool({ name: 'get_list', arguments: { list } });
+      expect(text(result)).toBe('MDBList API error 404: Not found');
+    });
   });
 });

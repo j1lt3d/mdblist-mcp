@@ -1,6 +1,16 @@
 import * as z from 'zod';
 import { apiPath } from '../mdblist-client.js';
-import { csv, cursor, defineTool, limit, mediaRef, mediaType, READ, sortOrder } from './shared.js';
+import {
+  csv,
+  cursor,
+  defineTool,
+  hintFor,
+  limit,
+  mediaRef,
+  mediaType,
+  READ,
+  sortOrder,
+} from './shared.js';
 
 export const mediaTools = [
   defineTool({
@@ -31,9 +41,9 @@ export const mediaTools = [
     annotations: READ,
     // MDBList documents an empty result for non-supporters, yet answers API-key requests
     // with 403 "Invalid app secret" regardless of supporter status.
-    errorHints: {
+    errorHint: hintFor({
       403: 'This is an access rejection, not a supporter limit (non-supporters get an empty result). MDBList refuses this endpoint for API-key requests; use get_media_info, which includes streams and watch_providers.',
-    },
+    }),
     toRequest: ({ provider, media_type, id }) => ({
       method: 'GET',
       path: apiPath`/${provider}/${media_type}/${id}/watchprovider_links/`,

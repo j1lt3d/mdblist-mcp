@@ -2,6 +2,7 @@ import * as z from 'zod';
 import { apiPath } from '../mdblist-client.js';
 import {
   defineTool,
+  hintFor,
   listId,
   listItemsParams,
   listItemsQuery,
@@ -50,6 +51,54 @@ function listPath(list: ListRef): string {
   return apiPath`/external/lists/${list.external_id}`;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function markRow(row: unknown): unknown {
+  if (!isRecord(row) || !('id' in row)) return row;
+  // `id` is the number /external/lists/{n} routes on, so it always becomes external_id and
+  // no plain `id` is left for the model to misuse. MDBList doesn't send its own external_id
+  // today; if it ever does, keep it under another name rather than drop either value.
+  const { id, external_id: sourceExternalId, ...rest } = row;
+  return {
+    external_id: id,
+    ...rest,
+    ...(sourceExternalId !== undefined && { source_external_id: sourceExternalId }),
+  };
+}
+
+/**
+ * Responses from the external-list endpoints (IMDb, Trakt, Letterboxd imports) carry a
+ * plain `id` that only works as {external_id}: passed as {id} it hits /lists/{id},
+ * which 404s or, worse, returns an unrelated MDBList list with the same number.
+ * Renaming the key lets the model copy it into the right field. Only call this on
+ * responses known to be external; other endpoints' `id`s are real MDBList list IDs.
+ * Both external endpoints return a bare array of rows; a single row object is also handled.
+ */
+export function markExternalLists(data: unknown): unknown {
+  return Array.isArray(data) ? data.map(markRow) : markRow(data);
+}
+
+/** 404 hints that depend on how the list was addressed, so they never suggest the form already used. */
+function listNotFoundHint(status: number, { list }: { list: ListRef }): string | undefined {
+  if (status !== 404) return undefined;
+  if ('id' in list) {
+    return "Only if this number came from browse_lists source 'external' (an IMDb, Trakt or Letterboxd list), retry with list: {external_id: N}. Otherwise the list doesn't exist or isn't visible to you.";
+  }
+  if ('external_id' in list) {
+    return "No connected external list has this external_id; get current values from browse_lists source 'external'.";
+  }
+  return undefined;
+}
+
+/** Write tools address lists by MDBList id only; external numbers never belong in list_id. */
+const writeListId = listId.describe(
+  "MDBList list ID of one of your own lists (from get_user_lists). Never an external_id from browse_lists source 'external'.",
+);
+const WRITE_LIST_HINT = hintFor({
+  404: "list_id must be the id of one of your own MDBList lists (see get_user_lists). Numbers from browse_lists source 'external' are external_id values, not MDBList list IDs.",
+});
+
 const LIST_SOURCES = {
   top: '/lists/top',
   curated: '/lists/curated',
@@ -82,7 +131,7 @@ export const listTools = [
     name: 'browse_lists',
     title: 'Browse lists',
     description:
-      'Browse lists: top public lists, curated lists, your liked lists, official MDBList lists, or your connected external lists.',
+      'Browse lists: top public lists, curated lists, your liked lists, official MDBList lists, or your connected external lists. External lists are returned with external_id: pass it to get_list/get_list_items as list: {external_id}.',
     inputSchema: z.object({
       source: z.enum(['top', 'curated', 'liked', 'official', 'external']),
       limit: z.number().int().positive().optional().describe('top, curated and liked only'),
@@ -94,6 +143,7 @@ export const listTools = [
       path: LIST_SOURCES[source],
       query: PAGINATED_SOURCES.has(source) ? page : {},
     }),
+    transformResult: (data, { source }) => (source === 'external' ? markExternalLists(data) : data),
   }),
 
   defineTool({
@@ -115,7 +165,9 @@ export const listTools = [
     description: 'Get metadata (name, owner, item count, likes) of a list.',
     inputSchema: z.object({ list: listRef }),
     annotations: READ,
+    errorHint: listNotFoundHint,
     toRequest: ({ list }) => ({ method: 'GET', path: listPath(list) }),
+    transformResult: (data, { list }) => ('external_id' in list ? markExternalLists(data) : data),
   }),
 
   defineTool({
@@ -124,6 +176,7 @@ export const listTools = [
     description: 'Get the movies and shows in a list, with filtering, sorting and pagination.',
     inputSchema: listItemsQuery.extend({ list: listRef }),
     annotations: READ,
+    errorHint: listNotFoundHint,
     toRequest: ({ list, ...query }) => ({
       method: 'GET',
       path: `${listPath(list)}/items`,
@@ -159,8 +212,9 @@ export const listTools = [
       name: `${action}_list_items`,
       title: `${action === 'add' ? 'Add' : 'Remove'} list items`,
       description: `${action === 'add' ? 'Add movies/shows to' : 'Remove movies/shows from'} one of the user's static lists.`,
-      inputSchema: requireMedia(mediaIdLists.extend({ list_id: listId })),
+      inputSchema: requireMedia(mediaIdLists.extend({ list_id: writeListId })),
       annotations: action === 'add' ? WRITE : REMOVE,
+      errorHint: WRITE_LIST_HINT,
       toRequest: ({ list_id, ...input }) => ({
         method: 'POST',
         path: apiPath`/lists/${list_id}/items/${action}`,
@@ -186,8 +240,9 @@ export const listTools = [
     title: 'Delete list',
     description:
       "Permanently delete one of the user's static lists (dynamic, official and external lists cannot be deleted).",
-    inputSchema: z.object({ list_id: listId }),
+    inputSchema: z.object({ list_id: writeListId }),
     annotations: REMOVE,
+    errorHint: WRITE_LIST_HINT,
     toRequest: ({ list_id }) => ({ method: 'DELETE', path: apiPath`/lists/${list_id}` }),
   }),
 ];
