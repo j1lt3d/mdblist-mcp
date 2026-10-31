@@ -1,6 +1,6 @@
 {
   "name": "mdblist-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for MDBList: let Claude, Cursor and other AI assistants search movies and TV shows, compare IMDb, Rotten Tomatoes, Metacritic and Letterboxd ratings, and manage lists, watchlist and watch history.",
   "keywords": [
     "mcp",
