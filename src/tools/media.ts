@@ -31,9 +31,10 @@ export const mediaTools = [
     annotations: READ,
     // MDBList documents an empty result for non-supporters, yet answers API-key requests
     // with 403 "Invalid app secret" regardless of supporter status.
-    errorHints: {
-      403: 'This is an access rejection, not a supporter limit (non-supporters get an empty result). MDBList refuses this endpoint for API-key requests; use get_media_info, which includes streams and watch_providers.',
-    },
+    errorHint: (status) =>
+      status === 403
+        ? 'This is an access rejection, not a supporter limit (non-supporters get an empty result). MDBList refuses this endpoint for API-key requests; use get_media_info, which includes streams and watch_providers.'
+        : undefined,
     toRequest: ({ provider, media_type, id }) => ({
       method: 'GET',
       path: apiPath`/${provider}/${media_type}/${id}/watchprovider_links/`,

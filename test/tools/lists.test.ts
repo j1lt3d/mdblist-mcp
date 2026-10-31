@@ -153,19 +153,48 @@ describeTools(
 );
 
 describe('markExternalLists', () => {
-  it('renames id to external_id on each row', () => {
-    expect(markExternalLists([{ id: 1, name: 'a' }, { id: 2 }])).toEqual([
-      { external_id: 1, name: 'a' },
+  const external = { id: 1, name: 'a', source: 'imdb' };
+  const renamed = { external_id: 1, name: 'a', source: 'imdb' };
+
+  it('renames every row when the response is known to be external', () => {
+    expect(markExternalLists([{ id: 1 }, { id: 2 }], true)).toEqual([
+      { external_id: 1 },
       { external_id: 2 },
     ]);
   });
 
-  it.each([{ error: 'x' }, null, 'text'])('passes non-array responses through (%j)', (data) => {
-    expect(markExternalLists(data)).toBe(data);
+  it.each(['imdb', 'trakt', 'letterboxd', 'IMDb'])(
+    'recognises source %s without the flag',
+    (source) => {
+      expect(markExternalLists([{ id: 1, source }])).toEqual([{ external_id: 1, source }]);
+    },
+  );
+
+  it.each([
+    { id: 63, source: 'official' },
+    { id: 14, slug: 'top' },
+  ])('leaves MDBList lists alone (%j)', (row) => {
+    expect(markExternalLists([row])).toEqual([row]);
+  });
+
+  it.each(['data', 'lists', 'contains'])('renames rows wrapped in {%s}', (key) => {
+    expect(markExternalLists({ [key]: [external], pagination: { total: 1 } })).toEqual({
+      [key]: [renamed],
+      pagination: { total: 1 },
+    });
+  });
+
+  it('renames a single list object', () => {
+    expect(markExternalLists(external)).toEqual(renamed);
+    expect(markExternalLists({ id: 1 }, true)).toEqual({ external_id: 1 });
+  });
+
+  it.each([null, 'text', 3, { error: 'x' }])('passes other responses through (%j)', (data) => {
+    expect(markExternalLists(data, true)).toEqual(data);
   });
 
   it('leaves rows without an id untouched', () => {
     const rows = [{ name: 'a' }, null, 3];
-    expect(markExternalLists(rows)).toEqual(rows);
+    expect(markExternalLists(rows, true)).toEqual(rows);
   });
 });

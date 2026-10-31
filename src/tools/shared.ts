@@ -8,8 +8,8 @@ export interface ToolDefinition<Schema extends z.ZodObject = z.ZodObject> {
   description: string;
   inputSchema: Schema;
   annotations: ToolAnnotations;
-  /** Explanations appended to API errors with the given HTTP status. */
-  errorHints?: Partial<Record<number, string>>;
+  /** Explanation appended to an API error, given its HTTP status and the call's arguments. */
+  errorHint?(status: number, args: z.infer<Schema>): string | undefined;
   // Method syntax keeps the parameter bivariant so heterogeneous tools fit in one array.
   toRequest(args: z.infer<Schema>): ApiRequest;
   /** Rewrites the API response before it reaches the model. */

@@ -15,12 +15,12 @@ const textResult = (text: string, isError = false): CallToolResult => ({
   ...(isError && { isError }),
 });
 
-function errorText(error: unknown, tool: ToolDefinition): string {
+function errorText(error: unknown, tool: ToolDefinition, args: unknown): string {
   if (!(error instanceof MdblistApiError)) {
     return error instanceof Error ? error.message : String(error);
   }
   const retry = error.retryAfter === null ? '' : ` (retry after ${error.retryAfter}s)`;
-  const hint = tool.errorHints?.[error.status];
+  const hint = tool.errorHint?.(error.status, args as Parameters<typeof tool.toRequest>[0]);
   return `${error.message}${retry}${hint ? ` — ${hint}` : ''}`;
 }
 
@@ -37,7 +37,7 @@ async function callTool(
     return textResult(JSON.stringify(data));
   } catch (error) {
     // Tool execution errors are reported in-band so the model can react (MCP spec: isError).
-    return textResult(errorText(error, tool), true);
+    return textResult(errorText(error, tool, args), true);
   }
 }
 
