@@ -50,17 +50,20 @@ function listPath(list: ListRef): string {
   return apiPath`/external/lists/${list.external_id}`;
 }
 
-/** Keys under which MDBList may wrap list rows. */
-const ROW_WRAPPERS = ['data', 'lists'] as const;
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 function markRow(row: unknown): unknown {
-  // Never overwrite an external_id the API already sent.
-  if (!isRecord(row) || !('id' in row) || 'external_id' in row) return row;
-  const { id, ...rest } = row;
-  return { external_id: id, ...rest };
+  if (!isRecord(row) || !('id' in row)) return row;
+  // `id` is the number /external/lists/{n} routes on, so it always becomes external_id and
+  // no plain `id` is left for the model to misuse. MDBList doesn't send its own external_id
+  // today; if it ever does, keep it under another name rather than drop either value.
+  const { id, external_id: sourceExternalId, ...rest } = row;
+  return {
+    external_id: id,
+    ...rest,
+    ...(sourceExternalId !== undefined && { source_external_id: sourceExternalId }),
+  };
 }
 
 /**
@@ -69,20 +72,14 @@ function markRow(row: unknown): unknown {
  * which 404s or, worse, returns an unrelated MDBList list with the same number.
  * Renaming the key lets the model copy it into the right field. Only call this on
  * responses known to be external; other endpoints' `id`s are real MDBList list IDs.
- * Handles bare arrays, single objects, and rows wrapped in {data} or {lists}.
+ * Both external endpoints return a bare array of rows; a single row object is also handled.
  */
 export function markExternalLists(data: unknown): unknown {
-  if (Array.isArray(data)) return data.map(markRow);
-  if (!isRecord(data)) return data;
-  const wrapped = ROW_WRAPPERS.filter((key) => Array.isArray(data[key]));
-  if (wrapped.length === 0) return markRow(data);
-  const result = { ...data };
-  for (const key of wrapped) result[key] = (data[key] as unknown[]).map(markRow);
-  return result;
+  return Array.isArray(data) ? data.map(markRow) : markRow(data);
 }
 
 /** 404 hints that depend on how the list was addressed, so they never suggest the form already used. */
-function listNotFoundHint(status: number, list: ListRef): string | undefined {
+function listNotFoundHint(status: number, { list }: { list: ListRef }): string | undefined {
   if (status !== 404) return undefined;
   if ('id' in list) {
     return "If this is an IMDb, Trakt or Letterboxd list (from browse_lists source 'external'), retry with list: {external_id: N} instead of {id: N}.";
@@ -159,7 +156,7 @@ export const listTools = [
     description: 'Get metadata (name, owner, item count, likes) of a list.',
     inputSchema: z.object({ list: listRef }),
     annotations: READ,
-    errorHint: (status, { list }) => listNotFoundHint(status, list),
+    errorHint: listNotFoundHint,
     toRequest: ({ list }) => ({ method: 'GET', path: listPath(list) }),
     transformResult: (data, { list }) => ('external_id' in list ? markExternalLists(data) : data),
   }),
@@ -170,7 +167,7 @@ export const listTools = [
     description: 'Get the movies and shows in a list, with filtering, sorting and pagination.',
     inputSchema: listItemsQuery.extend({ list: listRef }),
     annotations: READ,
-    errorHint: (status, { list }) => listNotFoundHint(status, list),
+    errorHint: listNotFoundHint,
     toRequest: ({ list, ...query }) => ({
       method: 'GET',
       path: `${listPath(list)}/items`,

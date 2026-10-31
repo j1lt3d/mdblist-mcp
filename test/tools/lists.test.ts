@@ -160,28 +160,22 @@ describe('markExternalLists', () => {
     ]);
   });
 
-  it('never overwrites an external_id the API already sent', () => {
-    const row = { id: 1, external_id: 'ls509030746' };
-    expect(markExternalLists([row])).toEqual([row]);
+  it('keeps an API-sent external_id as source_external_id, leaving no plain id', () => {
+    expect(markExternalLists([{ id: 1, external_id: 'ls509030746', name: 'a' }])).toEqual([
+      { external_id: 1, name: 'a', source_external_id: 'ls509030746' },
+    ]);
   });
 
   it('renames a single list object', () => {
     expect(markExternalLists({ id: 1, name: 'a' })).toEqual({ external_id: 1, name: 'a' });
   });
 
-  it('renames rows in every wrapper key, keeping other fields', () => {
-    expect(
-      markExternalLists({ data: [{ id: 1 }], lists: [{ id: 2 }], pagination: { total: 2 } }),
-    ).toEqual({
-      data: [{ external_id: 1 }],
-      lists: [{ external_id: 2 }],
-      pagination: { total: 2 },
-    });
-  });
-
-  it.each([null, 'text', 3, { error: 'x' }])('passes other responses through (%j)', (data) => {
-    expect(markExternalLists(data)).toEqual(data);
-  });
+  it.each([null, 'text', 3, { error: 'x' }, { data: [{ id: 1 }] }])(
+    'passes other responses through (%j)',
+    (data) => {
+      expect(markExternalLists(data)).toEqual(data);
+    },
+  );
 
   it('leaves rows without an id untouched', () => {
     const rows = [{ name: 'a' }, null, 3];
