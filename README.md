@@ -61,7 +61,8 @@ batch lookups.
 ### 2. Install the server
 
 You need [Node.js 22 or newer](https://nodejs.org) and
-[Git](https://git-scm.com).
+[Git](https://git-scm.com). If you'd rather not install either, skip to
+[Alternative: Docker](#alternative-docker).
 
 ```sh
 git clone https://github.com/j1lt3d/mdblist-mcp.git
@@ -151,8 +152,10 @@ If you'd rather not install Node.js, use the published image
 }
 ```
 
-Tags: `latest`, `X.Y.Z` and `X.Y`. To build it yourself, run
-`docker build -t mdblist-mcp .` in the cloned repo.
+Tags: `latest`, `X.Y.Z` and `X.Y`. To pin a version, use a tag such as
+`ghcr.io/j1lt3d/mdblist-mcp:0.2.0`. To update, run
+`docker pull ghcr.io/j1lt3d/mdblist-mcp` and restart your client. To build it
+yourself, run `docker build -t mdblist-mcp .` in the cloned repo.
 
 The container runs as an unprivileged user, and its application files are
 read-only.
